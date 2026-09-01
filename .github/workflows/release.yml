@@ -1,0 +1,26 @@
+name: Release
+
+# Publishing is driven by a tag, never by a push to main: a release should be a deliberate act with
+# a name, and `npm version` writes both the tag and the version in one step.
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance: it lets consumers verify on npmjs.com that this tarball was
+      # built by this workflow from this commit, rather than uploaded from somebody's laptop.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, registry-url: 'https://registry.npmjs.org'}
+      - run: npm ci
+      # `prepublishOnly` runs typecheck, tests and build. Left to npm rather than repeated here, so
+      # a local `npm publish` cannot skip what CI enforces.
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
