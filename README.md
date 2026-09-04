@@ -7,6 +7,27 @@ dependencies, ESM and CommonJS, Node 20+.
 npm i bitelio
 ```
 
+## `npx bitelio init`
+
+The package also ships a command. It signs you in the way `gh` and `docker login` do — a short code
+you approve in a browser, nothing pasted at a shell prompt — then gives you a project and a **test
+key** to put in your `.env`.
+
+```bash
+npx bitelio init
+```
+
+A test key does everything a live one does and stops before the provider, so your first send works
+straight away and reaches nobody. Re-running is safe: it reuses the project and keeps the key you
+already wrote down.
+
+For a scripted run: `--project <id>` picks the project without asking, and `--yes` takes the default
+where there is one. With projects already on the account and neither flag, it refuses rather than
+guesses — writing drafted emails into somebody's live project is not a thing to get wrong quietly.
+
+Reading your repository and drafting the emails themselves is not built yet; the command says so
+rather than pretending.
+
 ## Your first email, without touching DNS
 
 Every Bitelio send normally comes from a domain you have verified. There is one shared address you

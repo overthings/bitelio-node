@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
+import { spawn } from 'node:child_process';
 
-import { saveCredentials, type Credentials } from "./credentials.js";
-import { paint, write, type Io } from "./prompt.js";
+import { saveCredentials, type Credentials } from './credentials.js';
+import { paint, write, type Io } from './prompt.js';
 
 /**
  * The CLI half of RFC 8628 device authorization.
@@ -52,17 +52,17 @@ export interface DeviceLoginOptions {
  */
 export async function openUrlInBrowser(url: string): Promise<boolean> {
   const command =
-    process.platform === "darwin"
-      ? "open"
-      : process.platform === "win32"
-        ? "cmd"
-        : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+    process.platform === 'darwin'
+      ? 'open'
+      : process.platform === 'win32'
+        ? 'cmd'
+        : 'xdg-open';
+  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
 
   return new Promise((resolve) => {
     try {
-      const child = spawn(command, args, { stdio: "ignore", detached: true });
-      child.on("error", () => resolve(false));
+      const child = spawn(command, args, { stdio: 'ignore', detached: true });
+      child.on('error', () => resolve(false));
       child.unref();
       resolve(true);
     } catch {
@@ -84,27 +84,32 @@ const wait = (ms: number) =>
  * is just a poll at the wrong interval.
  */
 export function deviceApi(baseUrl: string, token?: string): InitHttp {
-  const root = baseUrl.replace(/\/+$/, "");
+  const root = baseUrl.replace(/\/+$/, '');
   const headers = (): Record<string, string> => ({
-    "content-type": "application/json",
+    'content-type': 'application/json',
     ...(token ? { authorization: `Bearer ${token}` } : {}),
   });
 
-  async function send(
-    method: "GET" | "POST",
-    path: string,
-    body?: unknown,
-  ): Promise<unknown> {
-    const response = await fetch(root + path, {
-      method,
-      headers: headers(),
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+  async function send(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
+    let response: Response;
+    try {
+      response = await fetch(root + path, {
+        method,
+        headers: headers(),
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (error) {
+      // Node's own message for an unreachable host is the two words "fetch failed", which tells
+      // somebody nothing about which host, or that a host was involved at all. This is the most
+      // likely way the whole command fails — offline, a VPN, a typo'd BITELIO_API_URL — so it is
+      // the one worth naming.
+      throw new Error(`Could not reach ${root}. ${(error as Error).message}`);
+    }
 
     const text = await response.text();
     let parsed: unknown;
     try {
-      parsed = text === "" ? {} : JSON.parse(text);
+      parsed = text === '' ? {} : JSON.parse(text);
     } catch {
       // An HTML error page from a proxy, which is what a misconfigured base URL actually returns.
       throw new Error(
@@ -118,7 +123,7 @@ export function deviceApi(baseUrl: string, token?: string): InitHttp {
       const message = (parsed as { error?: { message?: string } | string })
         ?.error;
       throw new Error(
-        typeof message === "string"
+        typeof message === 'string'
           ? message
           : (message?.message ?? `${root} answered ${response.status}.`),
       );
@@ -128,8 +133,8 @@ export function deviceApi(baseUrl: string, token?: string): InitHttp {
   }
 
   return {
-    post: (path, body) => send("POST", path, body),
-    get: (path) => send("GET", path),
+    post: (path, body) => send('POST', path, body),
+    get: (path) => send('GET', path),
   };
 }
 
@@ -141,22 +146,22 @@ export async function deviceLogin(
   const sleep = options.sleep ?? wait;
   const openUrl = options.openUrl ?? openUrlInBrowser;
 
-  const grant = (await api.post("/v1/init/device", {})) as DeviceGrantResponse;
+  const grant = (await api.post('/v1/init/device', {})) as DeviceGrantResponse;
   const url = grant.verificationUrlComplete ?? grant.verificationUrl;
 
   // Printed BEFORE anything else happens, and before the browser is even attempted. The person has
   // to be able to act on this while the CLI is the thing waiting for them.
   const say = (text: string) => write(text, io);
-  say("");
+  say('');
   say(`  Open ${paint.bold(io!, grant.verificationUrl)} and enter this code:`);
-  say("");
+  say('');
   say(`      ${paint.bold(io!, grant.userCode)}`);
-  say("");
+  say('');
 
   if (await openUrl(url)) {
-    say(paint.dim(io!, "  (opening your browser…)"));
+    say(paint.dim(io!, '  (opening your browser…)'));
   }
-  say(paint.dim(io!, "  Waiting for you to approve…"));
+  say(paint.dim(io!, '  Waiting for you to approve…'));
 
   // The deadline the server advertised, honoured rather than assumed: without it the CLI polls a
   // code that died ten minutes ago until somebody notices and kills it.
@@ -166,17 +171,17 @@ export async function deviceLogin(
   for (;;) {
     await sleep(interval);
     if (Date.now() > deadline) {
-      throw new Error("That code expired. Run the command again.");
+      throw new Error('That code expired. Run the command again.');
     }
 
-    const result = (await api.post("/v1/init/device/token", {
+    const result = (await api.post('/v1/init/device/token', {
       deviceCode: grant.deviceCode,
     })) as PollResponse;
 
-    if ("token" in result) {
+    if ('token' in result) {
       const credentials: Credentials = {
         token: result.token,
-        apiUrl: options.apiUrl ?? "https://api.bitelio.com",
+        apiUrl: options.apiUrl ?? 'https://api.bitelio.com',
       };
       const file = saveCredentials(credentials, options.home);
       // The path, never the token: a terminal keeps scrollback, and scrollback ends up in
@@ -187,17 +192,17 @@ export async function deviceLogin(
     }
 
     switch (result.error) {
-      case "authorization_pending":
+      case 'authorization_pending':
         continue;
-      case "slow_down":
+      case 'slow_down':
         // Back off rather than repeat: ignoring this is how a CLI gets itself locked out of a code
         // its own user is about to approve.
         interval = Math.max(interval * 2, (result.interval ?? 5) * 1000);
         continue;
-      case "denied":
-        throw new Error("You declined the request. Nothing was connected.");
-      case "expired":
-        throw new Error("That code expired. Run the command again.");
+      case 'denied':
+        throw new Error('You declined the request. Nothing was connected.');
+      case 'expired':
+        throw new Error('That code expired. Run the command again.');
       default:
         // A newer server with an error this version has never heard of. Stop and name it, rather
         // than treat the unknown as pending and spin until the deadline.

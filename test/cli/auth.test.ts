@@ -155,6 +155,25 @@ describe('while it waits', () => {
   });
 });
 
+describe('the transport', () => {
+  it('names the host it could not reach', async () => {
+    // Node's own message is the two words "fetch failed", which says nothing about which host or
+    // that a host was involved. Offline, on a VPN, or with a typo'd BITELIO_API_URL is the most
+    // likely way this command fails at all.
+    const {deviceApi} = await import('../../src/cli/auth.js');
+    const original = globalThis.fetch;
+    globalThis.fetch = (() => Promise.reject(new Error('fetch failed'))) as typeof fetch;
+
+    try {
+      await expect(deviceApi('https://api.example.test').post('/v1/init/device', {})).rejects.toThrow(
+        /Could not reach https:\/\/api\.example\.test/,
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
+
 describe('when it does not work out', () => {
   it('says the person declined, in those words', async () => {
     const api = server([{error: 'denied'}]);
