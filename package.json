@@ -5,9 +5,20 @@
   "license": "MIT",
   "author": "Overthings",
   "homepage": "https://docs.bitelio.com",
-  "repository": {"type": "git", "url": "git+https://github.com/overthings/bitelio-node.git"},
-  "bugs": {"url": "https://github.com/overthings/bitelio-node/issues"},
-  "keywords": ["bitelio", "email", "transactional-email", "marketing-automation", "api-client"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/overthings/bitelio-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/overthings/bitelio-node/issues"
+  },
+  "keywords": [
+    "bitelio",
+    "email",
+    "transactional-email",
+    "marketing-automation",
+    "api-client"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -19,8 +30,15 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
-  "engines": {"node": ">=20"},
+  "bin": {
+    "bitelio": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
@@ -36,5 +54,7 @@
     "typescript": "^5.6.0",
     "vitest": "^2.1.8"
   },
-  "publishConfig": {"access": "public"}
+  "publishConfig": {
+    "access": "public"
+  }
 }

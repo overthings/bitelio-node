@@ -1,7 +1,13 @@
 import {defineConfig} from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: {
+    index: 'src/index.ts',
+    // The `bitelio` bin. It gets a CJS twin like everything else here — tsup applies `format`
+    // per build, not per entry — which is 2.8 kB of tarball nothing executes. Not worth a second
+    // build config; noted so the next reader does not go looking for who runs dist/cli.cjs.
+    cli: 'src/cli/index.ts',
+  },
   // Both, because a mail SDK gets installed into servers that have not migrated and never will.
   format: ['esm', 'cjs'],
   dts: true,
