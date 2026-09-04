@@ -21,10 +21,21 @@ describe('parseArgs', () => {
     expect(parseArgs(['-v'])).toEqual({name: 'version'});
   });
 
-  it('reads init and its two flags, in any order', () => {
-    expect(parseArgs(['init'])).toEqual({name: 'init', dryRun: false, yes: false});
-    expect(parseArgs(['init', '--dry-run'])).toEqual({name: 'init', dryRun: true, yes: false});
-    expect(parseArgs(['init', '--yes', '--dry-run'])).toEqual({name: 'init', dryRun: true, yes: true});
+  it('reads init and its flags, in any order', () => {
+    expect(parseArgs(['init'])).toEqual({name: 'init', dryRun: false, yes: false, projectId: null});
+    expect(parseArgs(['init', '--dry-run'])).toEqual({name: 'init', dryRun: true, yes: false, projectId: null});
+    expect(parseArgs(['init', '--yes', '--dry-run'])).toEqual({name: 'init', dryRun: true, yes: true, projectId: null});
+  });
+
+  it('reads --project in both spellings', () => {
+    // It exists because the non-interactive refusal tells people to pass it. A message that names
+    // a flag the parser does not have is worse than no message.
+    expect(parseArgs(['init', '--project=p_123'])).toMatchObject({projectId: 'p_123'});
+    expect(parseArgs(['init', '--project', 'p_123'])).toMatchObject({projectId: 'p_123'});
+  });
+
+  it('refuses --project with nothing after it', () => {
+    expect(parseArgs(['init', '--project'])).toMatchObject({name: 'error'});
   });
 
   it('refuses an unknown command, and says what to type instead', () => {
