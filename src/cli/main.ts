@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import {deviceApi, deviceLogin} from './auth.js';
+import {loadCredentials} from './credentials.js';
 import {paint, write} from './prompt.js';
 
 /**
@@ -58,6 +60,34 @@ export function parseArgs(argv: string[]): Command | {name: 'error'; message: st
   return {name: 'init', dryRun: rest.includes('--dry-run'), yes: rest.includes('--yes')};
 }
 
+/** Overridable so the flow can be pointed at a development deployment. */
+const apiUrl = (): string => process.env.BITELIO_API_URL ?? 'https://api.bitelio.com';
+
+async function init(): Promise<number> {
+  const io = {input: process.stdin, output: process.stdout};
+
+  // An existing token is reused rather than re-prompted. Sending someone through a browser they
+  // do not need to open is the difference between a tool they run again and one they run once.
+  const existing = loadCredentials();
+  if (!existing) {
+    try {
+      await deviceLogin(deviceApi(apiUrl()), {apiUrl: apiUrl(), io});
+    } catch (error) {
+      write(paint.red(io, `  ${(error as Error).message}`), io);
+      return 1;
+    }
+  }
+
+  // Releases 2 to 4: reading the repository, proposing a lifecycle, opening the pull request. The
+  // command stops here and says so rather than printing a plausible success — a stub that lies
+  // about what it did is worse than no command at all.
+  write('');
+  write("  You're connected. The rest of `init` — reading this repository and drafting your");
+  write('  emails — is not built yet.');
+
+  return 0;
+}
+
 export async function run(argv: string[]): Promise<number> {
   const command = parseArgs(argv);
 
@@ -75,9 +105,6 @@ export async function run(argv: string[]): Promise<number> {
       return 1;
 
     case 'init':
-      // Releases 2 to 4. The command exists and refuses honestly rather than pretending: a stub
-      // that printed a plausible success would be worse than no command at all.
-      write('`bitelio init` is not built yet — this release only wires up the command.');
-      return 1;
+      return init();
   }
 }
