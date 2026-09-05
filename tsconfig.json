@@ -16,5 +16,9 @@
     "verbatimModuleSyntax": true,
     "noEmit": true
   },
-  "include": ["src", "test", "tsup.config.ts"]
+  "include": ["src", "test", "tsup.config.ts"],
+  // The fixtures are miniature Next apps, not part of this package. They import `next`, `stripe`
+  // and `svix`, which are deliberately not dependencies here — checking them would mean installing
+  // the very frameworks this package exists to avoid depending on.
+  "exclude": ["test/cli/fixtures"]
 }

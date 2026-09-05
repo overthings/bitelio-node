@@ -1,0 +1,5 @@
+{
+  "name": "solo-checkout",
+  "scripts": {"build": "next build"},
+  "dependencies": {"next": "15.0.0", "stripe": "^17.0.0", "@prisma/client": "^6.0.0"}
+}

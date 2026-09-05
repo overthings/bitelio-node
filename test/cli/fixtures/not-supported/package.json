@@ -1,0 +1,5 @@
+{
+  "name": "django-ish-api",
+  "scripts": {"test": "mocha"},
+  "dependencies": {"express": "^4.19.0", "knex": "^3.0.0"}
+}
