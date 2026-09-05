@@ -126,7 +126,7 @@ async function init(options: {projectId: string | null; yes: boolean; dryRun: bo
       credentials = await deviceLogin(deviceApi(apiUrl()), {apiUrl: apiUrl(), io});
     }
 
-    await provision(provisionApi(deviceApi(credentials.apiUrl, credentials.token)), {
+    const provisioned = await provision(provisionApi(deviceApi(credentials.apiUrl, credentials.token)), {
       io,
       // The directory it was run in. Not the git remote or the package name: this is a default a
       // person is about to be shown and can override, and the directory is the one thing that is
@@ -141,6 +141,39 @@ async function init(options: {projectId: string | null; yes: boolean; dryRun: bo
       write(paint.dim(io, '  Nothing was uploaded.'), io);
       return 1;
     }
+
+    const http = deviceApi(credentials.apiUrl, credentials.token);
+    write('', io);
+    write(paint.dim(io, '  Reading it…'), io);
+
+    // One prompt, assembled from exactly what the person approved and nothing else. The file list
+    // travels separately as the allowlist the server enforces replacements against.
+    const proposal = (await http.post('/v1/init/analyse', {
+      turn: 'lifecycle',
+      projectId: provisioned.projectId,
+      prompt: consent.files.map(file => `--- ${file.path} ---\n${file.content}`).join('\n\n'),
+      uploadedFiles: consent.files.map(file => file.path),
+    })) as {lifecycle?: {events: {name: string; source: string; confidence: string}[]; emails: {trigger: string; subject: string; purpose: string}[]}; text?: string};
+
+    if (!proposal.lifecycle) {
+      write(paint.red(io, '  The analysis came back with nothing to propose.'), io);
+      return 1;
+    }
+
+    write('', io);
+    write(`  Found ${proposal.lifecycle.events.length} lifecycle events:`, io);
+    write('', io);
+    for (const event of proposal.lifecycle.events) {
+      const note = event.confidence === 'low' ? paint.yellow(io, ' (unsure)') : '';
+      write(`    ${event.name.padEnd(28)} ${paint.dim(io, event.source)}${note}`, io);
+    }
+    write('', io);
+    write(`  It would write ${proposal.lifecycle.emails.length} emails:`, io);
+    write('', io);
+    for (const email of proposal.lifecycle.emails) {
+      write(`    ${paint.bold(io, email.subject)}`, io);
+      write(`      ${paint.dim(io, `on ${email.trigger} — ${email.purpose}`)}`, io);
+    }
   } catch (error) {
     write(paint.red(io, `  ${(error as Error).message}`), io);
     return 1;
@@ -150,9 +183,10 @@ async function init(options: {projectId: string | null; yes: boolean; dryRun: bo
   // says so rather than printing a plausible success — a stub that lies about what it did is worse
   // than no command at all. And it says plainly that the approval was not acted on, because
   // "approved" with nothing after it reads as "sent".
+  // Release 4: the patch, the verification and the pull request. It stops here and says so rather
+  // than printing a plausible success.
   write('', io);
-  write(paint.dim(io, '  Approved — but the upload is not built yet, so nothing left your machine.'), io);
-  write(paint.dim(io, '  Next: drafting your emails from this.'), io);
+  write(paint.dim(io, '  Generating the emails and opening a pull request is not built yet.'), io);
 
   return 0;
 }
