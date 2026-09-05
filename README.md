@@ -25,8 +25,18 @@ For a scripted run: `--project <id>` picks the project without asking, and `--ye
 where there is one. With projects already on the account and neither flag, it refuses rather than
 guesses — writing drafted emails into somebody's live project is not a thing to get wrong quietly.
 
-Reading your repository and drafting the emails themselves is not built yet; the command says so
-rather than pretending.
+It reads your repository first, and stops before touching your account if this is not a stack it
+understands — Next.js and Stripe, for now. `--dry-run` does that part and nothing else: it shows
+exactly which files it would upload, how large each one is, how many secrets it redacted from each,
+and what it could not find. Nothing leaves your machine, and no account is needed.
+
+    npx bitelio init --dry-run
+
+Before any upload it shows the same list and waits. You can read any file exactly as it would be
+sent, drop any of them — it tells you which events that costs you — or walk away. It will not
+upload without a person saying yes, so this half does not run in CI at all.
+
+Drafting the emails themselves is not built yet; the command says so rather than pretending.
 
 ## Your first email, without touching DNS
 

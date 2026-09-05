@@ -2,7 +2,9 @@
 import {basename, resolve} from 'node:path';
 
 import {deviceApi, deviceLogin, type InitHttp} from './auth.js';
+import {askConsent, printDryRun} from './consent.js';
 import {loadCredentials, type Credentials} from './credentials.js';
+import {build} from './extract.js';
 import {paint, write} from './prompt.js';
 import {provision, type InitProject, type ProvisionApi, type ProvisionResponse} from './provision.js';
 
@@ -95,8 +97,25 @@ function provisionApi(http: InitHttp): ProvisionApi {
   };
 }
 
-async function init(options: {projectId: string | null; yes: boolean}): Promise<number> {
+async function init(options: {projectId: string | null; yes: boolean; dryRun: boolean}): Promise<number> {
   const io = {input: process.stdin, output: process.stdout};
+
+  // Read the repository FIRST, and stop here if this is not a stack `init` understands. Signing
+  // somebody in, creating a project and minting a key before discovering the tool cannot help them
+  // leaves an account behind for nothing.
+  const extract = await build(process.cwd());
+  if (!extract.supported) {
+    write('', io);
+    write(paint.red(io, `  ${extract.reason}`), io);
+    return 1;
+  }
+
+  // `--dry-run` needs no account at all: it reads, redacts, prints, and stops. That is what lets a
+  // nervous developer inspect exactly what this tool would take before trusting it with anything.
+  if (options.dryRun) {
+    printDryRun(extract, io);
+    return 0;
+  }
 
   // An existing token is reused rather than re-prompted. Sending someone through a browser they do
   // not need to open is the difference between a tool they run again and one they run once.
@@ -116,16 +135,24 @@ async function init(options: {projectId: string | null; yes: boolean}): Promise<
       projectId: options.projectId,
       yes: options.yes,
     });
+
+    const consent = await askConsent(extract, io);
+    if (!consent.approved) {
+      write(paint.dim(io, '  Nothing was uploaded.'), io);
+      return 1;
+    }
   } catch (error) {
     write(paint.red(io, `  ${(error as Error).message}`), io);
     return 1;
   }
 
-  // Releases 2 to 4: reading the repository, proposing a lifecycle, opening the pull request. The
-  // command stops here and says so rather than printing a plausible success — a stub that lies
-  // about what it did is worse than no command at all.
-  write('');
-  write(paint.dim(io, '  Next: reading this repository and drafting your emails. Not built yet.'));
+  // Releases 3 and 4: the reasoning, the patch and the pull request. The command stops here and
+  // says so rather than printing a plausible success — a stub that lies about what it did is worse
+  // than no command at all. And it says plainly that the approval was not acted on, because
+  // "approved" with nothing after it reads as "sent".
+  write('', io);
+  write(paint.dim(io, '  Approved — but the upload is not built yet, so nothing left your machine.'), io);
+  write(paint.dim(io, '  Next: drafting your emails from this.'), io);
 
   return 0;
 }
