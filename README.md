@@ -36,7 +36,23 @@ Before any upload it shows the same list and waits. You can read any file exactl
 sent, drop any of them — it tells you which events that costs you — or walk away. It will not
 upload without a person saying yes, so this half does not run in CI at all.
 
-Drafting the emails themselves is not built yet; the command says so rather than pretending.
+Then it shows you the lifecycle it found and the emails it would write, and asks again. Only after
+that second yes does it generate anything.
+
+What it does to your repository, and what it will not do:
+
+- **A branch of its own, from `HEAD`.** With uncommitted changes it stops before doing anything —
+  so whatever it makes, `git branch -D bitelio-init` throws all of it away.
+- **It runs your tests before and after.** A check that was already failing stays failing and the
+  pull request says so; a check that passed and now fails means the patch is **undone** and you are
+  put back where you were. Repositories with a red test on main are common, and a tool that could
+  never open a pull request for one — or that blamed itself for a failure it did not cause — would
+  be useless on half of them.
+- **No key goes in the pull request.** Only the variable name and a placeholder. The test key is
+  printed once in your terminal, for your local `.env`, because a test key committed into production
+  configuration is an app that deploys, runs, records every send and delivers none of them.
+- **If `gh` is missing the branch stays.** It prints the compare URL instead of throwing away work
+  because the last optional step could not run.
 
 ## Your first email, without touching DNS
 

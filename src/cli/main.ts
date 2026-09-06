@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 import {basename, resolve} from 'node:path';
 
+import {currentBranch, isClean, isGitRepository, verifyPatch, type Patch} from './apply.js';
 import {deviceApi, deviceLogin, type InitHttp} from './auth.js';
 import {askConsent, printDryRun} from './consent.js';
 import {loadCredentials, type Credentials} from './credentials.js';
 import {build} from './extract.js';
 import {paint, write} from './prompt.js';
+import {confirm} from './prompt.js';
 import {provision, type InitProject, type ProvisionApi, type ProvisionResponse} from './provision.js';
+import {buildBody, openPullRequest} from './pullRequest.js';
 
 /**
  * The `bitelio` command.
@@ -86,6 +89,20 @@ export function parseArgs(argv: string[]): Command | {name: 'error'; message: st
   return {name: 'init', dryRun: flags.includes('--dry-run'), yes: flags.includes('--yes'), projectId};
 }
 
+/**
+ * The branch to open the pull request against — whatever they were on when they ran it.
+ *
+ * Read BEFORE anything is applied, because by the time the pull request is opened the CLI has
+ * moved them onto its own branch and `HEAD` no longer answers the question.
+ */
+function branchToTargetOr(fallback: string): string {
+  try {
+    return isGitRepository(process.cwd()) ? currentBranch(process.cwd()) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /** Overridable so the flow can be pointed at a development deployment. */
 const apiUrl = (): string => process.env.BITELIO_API_URL ?? 'https://api.bitelio.com';
 
@@ -103,6 +120,21 @@ async function init(options: {projectId: string | null; yes: boolean; dryRun: bo
   // Read the repository FIRST, and stop here if this is not a stack `init` understands. Signing
   // somebody in, creating a project and minting a key before discovering the tool cannot help them
   // leaves an account behind for nothing.
+  // Checked before the model, before the account, before anything: a repository with uncommitted
+  // work cannot receive a patch, and discovering that after an analysis has been paid for wastes
+  // one of three runs a day on nothing.
+  if (!options.dryRun) {
+    if (!isGitRepository(process.cwd())) {
+      write(paint.red(io, '  This is not a git repository, and `init` finishes by opening a pull request.'), io);
+      return 1;
+    }
+    if (!isClean(process.cwd())) {
+      write(paint.red(io, '  You have uncommitted changes. Commit or stash them first.'), io);
+      write(paint.dim(io, '  `init` works on a branch of its own, so you can throw the whole thing away at once.'), io);
+      return 1;
+    }
+  }
+
   const extract = await build(process.cwd());
   if (!extract.supported) {
     write('', io);
@@ -136,6 +168,7 @@ async function init(options: {projectId: string | null; yes: boolean; dryRun: bo
       yes: options.yes,
     });
 
+    const targetBranch = branchToTargetOr('main');
     const consent = await askConsent(extract, io);
     if (!consent.approved) {
       write(paint.dim(io, '  Nothing was uploaded.'), io);
@@ -174,6 +207,66 @@ async function init(options: {projectId: string | null; yes: boolean; dryRun: bo
       write(`    ${paint.bold(io, email.subject)}`, io);
       write(`      ${paint.dim(io, `on ${email.trigger} — ${email.purpose}`)}`, io);
     }
+
+    // The gate the whole two-turn design exists for: the expensive half runs only after a person
+    // has seen what it would do and said yes.
+    write('', io);
+    if (!(await confirm('  Create them?', {io, default: true}))) {
+      write(paint.dim(io, '  Nothing was created.'), io);
+      return 0;
+    }
+
+    write('', io);
+    write(paint.dim(io, '  Writing them…'), io);
+
+    const built = (await http.post('/v1/init/analyse', {
+      turn: 'patch',
+      projectId: provisioned.projectId,
+      prompt: `Approved. Write the files for:\n${JSON.stringify(proposal.lifecycle, null, 2)}`,
+      uploadedFiles: consent.files.map(file => file.path),
+    })) as {patch?: Patch};
+
+    if (!built.patch) {
+      write(paint.red(io, '  The model produced no files.'), io);
+      return 1;
+    }
+
+    // Applied on a branch, checked against a baseline, and undone if it broke something that
+    // worked. The baseline is what makes a repository with an already-red test still usable.
+    const verdict = await verifyPatch(process.cwd(), built.patch, {
+      branch: 'bitelio-init',
+      testCommand: extract.detected.testCommand,
+    });
+
+    if (!verdict.safe) {
+      write('', io);
+      write(paint.red(io, '  The patch broke something that was passing, so it was undone.'), io);
+      for (const check of verdict.checks.filter(c => c.before && !c.after)) {
+        write(paint.dim(io, `    ${check.name}: ${check.output.split('\n').slice(-3).join(' ')}`), io);
+      }
+      return 1;
+    }
+
+    const body = buildBody({
+      verdict,
+      created: built.patch.create,
+      replaced: built.patch.replace,
+      unsure: proposal.lifecycle.events.filter(e => e.confidence === 'low'),
+      dashboardUrl: `${credentials.apiUrl.replace('//api.', '//app.')}/settings`,
+    });
+
+    const opened = await openPullRequest(process.cwd(), verdict.branch!, targetBranch, body);
+
+    write('', io);
+    if (opened.url) {
+      write(paint.green(io, `  Opened ${opened.url}`), io);
+    } else {
+      // The branch is the valuable part and it is committed. Losing it because the last optional
+      // step failed would be the worst possible trade.
+      write(paint.yellow(io, `  ${opened.reason}`), io);
+      write(`  The work is on ${paint.bold(io, verdict.branch!)}.`, io);
+      if (opened.openManuallyAt) write(`  Open it at ${opened.openManuallyAt}`, io);
+    }
   } catch (error) {
     write(paint.red(io, `  ${(error as Error).message}`), io);
     return 1;
@@ -183,11 +276,6 @@ async function init(options: {projectId: string | null; yes: boolean; dryRun: bo
   // says so rather than printing a plausible success — a stub that lies about what it did is worse
   // than no command at all. And it says plainly that the approval was not acted on, because
   // "approved" with nothing after it reads as "sent".
-  // Release 4: the patch, the verification and the pull request. It stops here and says so rather
-  // than printing a plausible success.
-  write('', io);
-  write(paint.dim(io, '  Generating the emails and opening a pull request is not built yet.'), io);
-
   return 0;
 }
 
