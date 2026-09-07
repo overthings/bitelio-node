@@ -14,8 +14,13 @@ you approve in a browser, nothing pasted at a shell prompt — then gives you a 
 key** to put in your `.env`.
 
 ```bash
-npx bitelio init
+npx bitelio@latest init
 ```
+
+`@latest` is not decoration. `npx` prefers a copy of the package already installed in your project
+over fetching one, and every version before 0.2.0 was the SDK with no command in it — so a plain
+`npx bitelio init` in a project that already depends on `bitelio` fails with npm's unhelpful
+`could not determine executable to run`. Naming the version skips the local copy.
 
 A test key does everything a live one does and stops before the provider, so your first send works
 straight away and reaches nobody. Re-running is safe: it reuses the project and keeps the key you
