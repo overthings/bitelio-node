@@ -24,7 +24,18 @@ import {buildBody, openPullRequest} from './pullRequest.js';
  * argues for on exactly that basis. Argument parsing, prompts and colour are therefore hand-rolled.
  */
 
-const VERSION = '0.1.0';
+/**
+ * Replaced at build time with the version in package.json — see `tsup.config.ts`.
+ *
+ * Declared rather than imported so nothing reads a file at runtime, and fixed here because the
+ * hand-written constant that used to live in this spot shipped `0.2.0` announcing itself as
+ * `0.1.0`: `npm version` writes package.json and knows nothing about this file.
+ *
+ * The fallback covers running from source (`tsx src/cli/index.ts`), where no substitution happens.
+ */
+declare const __BITELIO_VERSION__: string | undefined;
+
+const VERSION = typeof __BITELIO_VERSION__ === 'string' ? __BITELIO_VERSION__ : '0.0.0-dev';
 
 const USAGE = `bitelio ${VERSION}
 

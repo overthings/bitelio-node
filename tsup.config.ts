@@ -1,4 +1,15 @@
+import {readFileSync} from 'node:fs';
+
 import {defineConfig} from 'tsup';
+
+/**
+ * The version, taken from package.json at build time.
+ *
+ * It used to be a constant in `src/cli/main.ts`, and `npm version minor` does not know that file
+ * exists — so 0.2.0 shipped a CLI that told everybody it was 0.1.0. Two places that must agree with
+ * nothing making them agree is a bug with a release cycle for a feedback loop.
+ */
+const {version} = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8')) as {version: string};
 
 export default defineConfig({
   entry: {
@@ -22,4 +33,6 @@ export default defineConfig({
   // Nothing to bundle: the package has no runtime dependencies, deliberately. A client that drags
   // a dependency tree onto somebody else's production server shows up in their first audit.
   treeshake: true,
+  // Substituted into `src/cli/main.ts`, which declares it. See the note above.
+  define: {__BITELIO_VERSION__: JSON.stringify(version)},
 });

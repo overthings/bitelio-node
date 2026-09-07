@@ -54,3 +54,30 @@ describe('parseArgs', () => {
     expect((parsed as {message: string}).message).toMatch(/--dry-runn/);
   });
 });
+
+describe('the version it reports', () => {
+  it('is the one in package.json', async () => {
+    // `0.2.0` shipped announcing itself as `0.1.0`: the version was a hand-written constant in
+    // main.ts, and `npm version` writes package.json and knows nothing about that file. Two places
+    // that must agree, with nothing making them — this is the thing making them.
+    //
+    // Read from the BUILT bin, not from the source: the substitution happens at build time, so
+    // asserting against the source would test the fallback and prove nothing.
+    const {execFileSync} = await import('node:child_process');
+    const {readFileSync, existsSync} = await import('node:fs');
+    const {fileURLToPath} = await import('node:url');
+    const {join} = await import('node:path');
+
+    const root = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+    const bin = join(root, 'dist', 'cli.js');
+    if (!existsSync(bin)) {
+      // `npm run build` has not run. Skipped rather than failed: this asserts a property of the
+      // artefact, and there is no artefact.
+      return;
+    }
+
+    const {version} = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {version: string};
+
+    expect(execFileSync('node', [bin, '--version'], {encoding: 'utf8'}).trim()).toBe(version);
+  });
+});
