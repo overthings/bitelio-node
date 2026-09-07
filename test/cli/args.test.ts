@@ -61,23 +61,24 @@ describe('the version it reports', () => {
     // main.ts, and `npm version` writes package.json and knows nothing about that file. Two places
     // that must agree, with nothing making them — this is the thing making them.
     //
-    // Read from the BUILT bin, not from the source: the substitution happens at build time, so
-    // asserting against the source would test the fallback and prove nothing.
+    // It BUILDS first, rather than reading whatever `dist` happens to hold. The first version of
+    // this test asserted against the existing artefact and went red the moment `npm version`
+    // bumped the manifest without a rebuild — which is the normal state right after a bump, and
+    // says nothing about whether the code is correct. What is worth pinning is that a build FROM
+    // this package.json reports THIS version, which is exactly what `prepublishOnly` does before
+    // every publish.
     const {execFileSync} = await import('node:child_process');
-    const {readFileSync, existsSync} = await import('node:fs');
+    const {readFileSync} = await import('node:fs');
     const {fileURLToPath} = await import('node:url');
     const {join} = await import('node:path');
 
     const root = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
-    const bin = join(root, 'dist', 'cli.js');
-    if (!existsSync(bin)) {
-      // `npm run build` has not run. Skipped rather than failed: this asserts a property of the
-      // artefact, and there is no artefact.
-      return;
-    }
-
     const {version} = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {version: string};
 
-    expect(execFileSync('node', [bin, '--version'], {encoding: 'utf8'}).trim()).toBe(version);
-  });
+    execFileSync('npm', ['run', 'build'], {cwd: root, stdio: 'ignore'});
+
+    expect(execFileSync('node', [join(root, 'dist', 'cli.js'), '--version'], {encoding: 'utf8'}).trim()).toBe(
+      version,
+    );
+  }, 60_000);
 });
