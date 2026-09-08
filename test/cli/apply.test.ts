@@ -244,10 +244,24 @@ describe('turning a plain directory into a repository', () => {
     writeFileSync(join(plain, 'package.json'), JSON.stringify({name: 'no-git-here'}));
     mkdirSync(join(plain, 'app'), {recursive: true});
     writeFileSync(join(plain, 'app', 'handler.ts'), 'export const handler = 1;\n');
-    execFileSync('git', ['config', '--global', '--get', 'user.email'], {stdio: 'ignore'});
+
+    // `initialiseRepository` commits, and a commit needs an identity. Supplied through the
+    // environment rather than `git config --global`, so this never reads or writes the machine's
+    // own configuration — a CI runner has none, and the first version of this block called
+    // `git config --global --get user.email`, which THROWS when there is none. That took the whole
+    // release down. A test that depends on how the developer's laptop is configured is not a test;
+    // this is the second time in this package, after the one that assumed `gh` was absent.
+    process.env.GIT_AUTHOR_NAME = 'Test';
+    process.env.GIT_AUTHOR_EMAIL = 'test@example.com';
+    process.env.GIT_COMMITTER_NAME = 'Test';
+    process.env.GIT_COMMITTER_EMAIL = 'test@example.com';
   });
 
   afterEach(() => {
+    delete process.env.GIT_AUTHOR_NAME;
+    delete process.env.GIT_AUTHOR_EMAIL;
+    delete process.env.GIT_COMMITTER_NAME;
+    delete process.env.GIT_COMMITTER_EMAIL;
     rmSync(plain, {recursive: true, force: true});
   });
 
