@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 import {basename, resolve} from 'node:path';
 
-import {currentBranch, isClean, isGitRepository, verifyPatch, type Patch} from './apply.js';
+import {currentBranch, initialiseRepository, isClean, isGitRepository, verifyPatch, type Patch} from './apply.js';
 import {deviceApi, deviceLogin, type InitHttp} from './auth.js';
 import {askConsent, printDryRun} from './consent.js';
 import {loadCredentials, type Credentials} from './credentials.js';
 import {build} from './extract.js';
-import {paint, write} from './prompt.js';
-import {confirm} from './prompt.js';
+import {confirm, isInteractive, paint, write} from './prompt.js';
 import {provision, type InitProject, type ProvisionApi, type ProvisionResponse} from './provision.js';
 import {buildBody, openPullRequest} from './pullRequest.js';
 
@@ -136,8 +135,39 @@ async function init(options: {projectId: string | null; yes: boolean; dryRun: bo
   // one of three runs a day on nothing.
   if (!options.dryRun) {
     if (!isGitRepository(process.cwd())) {
-      write(paint.red(io, '  This is not a git repository, and `init` finishes by opening a pull request.'), io);
-      return 1;
+      // Offered rather than refused. `init` keeps its work on a branch precisely so it can be
+      // thrown away in one command, and without a repository there is neither. But the only thing
+      // wrong with this directory is that nobody has run two commands in it, and refusing outright
+      // sent people away over that.
+      write('', io);
+      write('  This is not a git repository, so there would be no way to undo what `init` writes.', io);
+      write(paint.dim(io, '  It keeps its work on a branch of its own, which is what makes that one command.'), io);
+      write('', io);
+
+      // Refused outright with nobody watching, rather than taking a default. `confirm` answers with
+      // its default in a non-interactive shell — right for a harmless question, wrong for one whose
+      // yes runs `git init` and commits somebody's working directory. Caught by piping `n` into it
+      // and watching it create `.git` anyway.
+      if (!isInteractive(io)) {
+        write(paint.red(io, '  Run `git init` yourself first — this is not something to do to a folder unasked.'), io);
+        return 1;
+      }
+
+      if (!(await confirm('  Run `git init` here and commit what is already in this folder?', {io, default: false}))) {
+        write(paint.dim(io, '  Nothing was done. Run `git init` yourself and try again.'), io);
+        return 1;
+      }
+
+      try {
+        initialiseRepository(process.cwd());
+      } catch (error) {
+        // Almost always `user.email`/`user.name` unset, which git says clearly and we should not
+        // paraphrase into something vaguer.
+        write(paint.red(io, `  Could not do it: ${(error as Error).message.split('\n')[0]}`), io);
+        return 1;
+      }
+
+      write(paint.dim(io, '  Done. `rm -rf .git` puts this folder back exactly as it was.'), io);
     }
     if (!isClean(process.cwd())) {
       write(paint.red(io, '  You have uncommitted changes. Commit or stash them first.'), io);

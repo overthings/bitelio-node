@@ -105,6 +105,26 @@ function insideRepo(repo: string, path: string): string {
   return target;
 }
 
+/**
+ * Turn a plain directory into a git repository, with everything in it as the first commit.
+ *
+ * Offered, never done silently — see the caller. `init`'s whole safety story is that its work lives
+ * on a branch you can delete in one command, and without a repository there is no branch and no
+ * undo. Refusing outright was the first behaviour here and it was too strict: the only thing wrong
+ * with such a directory is that nobody has run two commands in it, and `create-next-app` runs both
+ * of them for you.
+ *
+ * Reversible in the way that matters: `rm -rf .git` puts it back exactly as it was, and no remote
+ * is involved.
+ */
+export function initialiseRepository(repo: string): void {
+  git(repo, 'init', '-q');
+  git(repo, 'add', '-A');
+  // `-q` is not enough on a repo with no user.name configured; that failure is worth surfacing
+  // rather than swallowing, so it is left to throw.
+  git(repo, 'commit', '-q', '-m', 'Initial commit');
+}
+
 export interface ApplyOptions {
   branch: string;
 }

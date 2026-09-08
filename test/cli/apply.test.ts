@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 
-import {applyPatch, currentBranch, isClean, verifyPatch} from '../../src/cli/apply.js';
+import {applyPatch, currentBranch, initialiseRepository, isClean, isGitRepository, verifyPatch} from '../../src/cli/apply.js';
 import type {Patch} from '../../src/cli/apply.js';
 
 /**
@@ -233,5 +233,61 @@ describe('checking the patch against a baseline', () => {
     const verdict = await verifyPatch(repo, patch(), {branch: 'bitelio-init', testCommand: 'npm test'});
 
     expect(verdict.checks[0]?.output).toContain('the specific reason');
+  });
+});
+
+describe('turning a plain directory into a repository', () => {
+  let plain: string;
+
+  beforeEach(() => {
+    plain = mkdtempSync(join(tmpdir(), 'bitelio-plain-'));
+    writeFileSync(join(plain, 'package.json'), JSON.stringify({name: 'no-git-here'}));
+    mkdirSync(join(plain, 'app'), {recursive: true});
+    writeFileSync(join(plain, 'app', 'handler.ts'), 'export const handler = 1;\n');
+    execFileSync('git', ['config', '--global', '--get', 'user.email'], {stdio: 'ignore'});
+  });
+
+  afterEach(() => {
+    rmSync(plain, {recursive: true, force: true});
+  });
+
+  it('leaves it usable: a repository with everything already committed', async () => {
+    // Refusing outright was the first behaviour, and it sent people away over two commands that
+    // `create-next-app` runs for them anyway. What `init` needs is a branch to put its work on, and
+    // this is the smallest thing that provides one.
+    initialiseRepository(plain);
+
+    expect(isGitRepository(plain)).toBe(true);
+    expect(isClean(plain)).toBe(true);
+  });
+
+  it('commits what was already there, so nothing of theirs is lost in the branch', async () => {
+    initialiseRepository(plain);
+
+    const tracked = execFileSync('git', ['ls-files'], {cwd: plain, encoding: 'utf8'});
+    expect(tracked).toContain('package.json');
+    expect(tracked).toContain('app/handler.ts');
+  });
+
+  it('makes the patch applicable, which is the whole reason it exists', async () => {
+    initialiseRepository(plain);
+
+    const result = await applyPatch(
+      plain,
+      {replace: [{path: 'app/handler.ts', contents: 'export const handler = 2;\n', reviewed: true}], create: []},
+      {branch: 'bitelio-init'},
+    );
+
+    expect(result.branch).toBe('bitelio-init');
+    expect(readFileSync(join(plain, 'app', 'handler.ts'), 'utf8')).toContain('handler = 2');
+  });
+
+  it('is undone by removing .git, which is what the CLI tells them', async () => {
+    initialiseRepository(plain);
+    rmSync(join(plain, '.git'), {recursive: true, force: true});
+
+    expect(isGitRepository(plain)).toBe(false);
+    // Their files are untouched.
+    expect(readFileSync(join(plain, 'app', 'handler.ts'), 'utf8')).toContain('handler = 1');
   });
 });
